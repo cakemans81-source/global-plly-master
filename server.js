@@ -2154,16 +2154,27 @@ app.post('/api/generate-lyrics', verifyToken, async (req, res) => {
         const perspectives = ['first-person singular', 'first-person plural', 'second-person', 'third-person narrative'];
         const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
         const randomSeed = Math.floor(Math.random() * 999999);
-        const lyricsPrompt = 'Write compelling song lyrics for a ' + genreInfo.name + ' track.'
+        const lyricsPrompt = 'Write FULL, COMPLETE song lyrics for a ~3 minute ' + genreInfo.name + ' track.'
             + ' Region/Culture: ' + countryInfo.name + '.'
             + ' Mood: ' + moodInfo.name + '.'
             + ' Language: ' + vocalLangInfo.label + '.'
             + (themeText ? ' Theme: "' + themeText + '".' : ' Pick a completely unexpected, original theme — not love, not party, not success.')
             + ' Perspective: ' + randomPerspective + '.'
-            + ' Write complete lyrics with [Intro], [Verse 1], [Pre-Chorus], [Chorus], [Verse 2], [Bridge], and [Outro] sections.'
-            + ' Make it emotionally resonant and singable.'
+            + ' STRUCTURE REQUIREMENTS (write every line in full — NO shortcuts like "(repeat)" or "(x2)"):'
+            + ' [Intro] 4-6 lines,'
+            + ' [Verse 1] 10-14 lines,'
+            + ' [Pre-Chorus] 4-6 lines,'
+            + ' [Chorus] 8-12 lines,'
+            + ' [Verse 2] 10-14 lines (different content from Verse 1),'
+            + ' [Pre-Chorus] 4-6 lines,'
+            + ' [Chorus] 8-12 lines (write it out fully again),'
+            + ' [Bridge] 6-10 lines,'
+            + ' [Chorus] 8-12 lines (final, write it out fully again),'
+            + ' [Outro] 4-6 lines.'
+            + ' TOTAL: minimum 80 lines. Every section must be written in full.'
+            + ' Make it emotionally resonant, singable, and cohesive throughout.'
             + ' IMPORTANT: Variation seed #' + randomSeed + ' — every generation must feel like a different song. Use a unique metaphor, unusual imagery, or an unexpected narrative arc. Never repeat structures or phrases from previous outputs.'
-            + ' Return a JSON object: { "title": "<creative song title in the lyrics language>", "lyrics": "<full lyrics text>" }'
+            + ' Return a JSON object: { "title": "<creative song title in the lyrics language>", "lyrics": "<full lyrics with \\n between lines>" }'
             + ' No other text, only valid JSON.';
 
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
