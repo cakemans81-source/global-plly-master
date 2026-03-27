@@ -1913,10 +1913,10 @@ app.post('/api/generate-music', async (req, res) => {
                 const response = await ai.models.generateContent({
                     model: aiModel || 'gemini-3.1-pro-preview',
                     contents: promptText,
-                    config: { responseMimeType: 'application/json' }
+                    config: { temperature: 1.0 }
                 });
 
-                let text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                let text = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
                 const parsed = JSON.parse(text);
 
                 // 덮어쓰기
@@ -2084,11 +2084,11 @@ REMINDER: Apply the full V5 7-step formula. Vary energy from soft→intense acro
             contents: [
                 { role: 'user', parts: [{ text: systemPrompt + '\n\n' + userContext }] }
             ],
-            config: { responseMimeType: 'application/json' }
+            config: { temperature: 1.0 }
         });
 
         // ── 응답 파싱 ──
-        let rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        let rawText = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
         let prompts;
         try {
             prompts = JSON.parse(rawText);
@@ -2231,7 +2231,7 @@ app.post('/api/generate-style', verifyToken, async (req, res) => {
             contents: stylePrompt,
             config: { temperature: 1.3, topP: 0.97 }
         });
-        const style = (response.text || '').trim().replace(/\n/g, ', ');
+        const style = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().replace(/\n/g, ', ');
         console.log('✅ /api/generate-style (user: ' + req.user.username + ')');
         res.json({ success: true, style });
     } catch (err) {
@@ -2590,10 +2590,10 @@ app.post('/api/generate-image-prompt', async (req, res) => {
                 const response = await ai.models.generateContent({
                     model: aiModel || 'gemini-3.1-pro-preview',
                     contents: promptText,
-                    config: { responseMimeType: 'application/json' }
+                    config: { temperature: 1.0 }
                 });
 
-                let text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                let text = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
                 let parsed = JSON.parse(text);
 
                 // 생성된 데이터를 덮어쓰기
@@ -2674,10 +2674,10 @@ app.post('/api/gemini-trends', verifyToken, async (req, res) => {
         const response = await ai.models.generateContent({
             model: aiModel || 'gemini-3.1-pro-preview',
             contents: promptText,
-            config: { responseMimeType: 'application/json' }
+            config: { temperature: 1.0 }
         });
 
-        let text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        let text = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(text);
 
         // 현재 시각 추가
@@ -2738,9 +2738,9 @@ app.post('/api/generate-batch', async (req, res) => {
                 const response = await ai.models.generateContent({
                     model: aiModel || 'gemini-3.1-pro-preview',
                     contents: promptText,
-                    config: { responseMimeType: 'application/json' }
+                    config: { temperature: 1.0 }
                 });
-                let text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                let text = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
                 const parsedArr = JSON.parse(text);
 
                 if (Array.isArray(parsedArr)) {
@@ -2845,10 +2845,10 @@ Use only genre names from this list: K-Pop, K-Hip Hop, K-Indie, Trot, Ballad, J-
         const response = await ai.models.generateContent({
             model: GEMINI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { responseMimeType: 'application/json' }
+            config: { temperature: 1.0 }
         });
 
-        let rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        let rawText = (response.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
         let trendsData;
         try {
             trendsData = JSON.parse(rawText);
