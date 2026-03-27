@@ -2154,28 +2154,42 @@ app.post('/api/generate-lyrics', verifyToken, async (req, res) => {
         const perspectives = ['first-person singular', 'first-person plural', 'second-person', 'third-person narrative'];
         const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
         const randomSeed = Math.floor(Math.random() * 999999);
-        const lyricsPrompt = 'Write FULL, COMPLETE song lyrics for a ~3 minute ' + genreInfo.name + ' track.'
-            + ' Region/Culture: ' + countryInfo.name + '.'
-            + ' Mood: ' + moodInfo.name + '.'
-            + ' Language: ' + vocalLangInfo.label + '.'
-            + (themeText ? ' Theme: "' + themeText + '".' : ' Pick a completely unexpected, original theme — not love, not party, not success.')
-            + ' Perspective: ' + randomPerspective + '.'
-            + ' STRUCTURE REQUIREMENTS (write every line in full — NO shortcuts like "(repeat)" or "(x2)"):'
-            + ' [Intro] 4-6 lines,'
-            + ' [Verse 1] 10-14 lines,'
-            + ' [Pre-Chorus] 4-6 lines,'
-            + ' [Chorus] 8-12 lines,'
-            + ' [Verse 2] 10-14 lines (different content from Verse 1),'
-            + ' [Pre-Chorus] 4-6 lines,'
-            + ' [Chorus] 8-12 lines (write it out fully again),'
-            + ' [Bridge] 6-10 lines,'
-            + ' [Chorus] 8-12 lines (final, write it out fully again),'
-            + ' [Outro] 4-6 lines.'
-            + ' TOTAL: minimum 80 lines. Every section must be written in full.'
-            + ' Make it emotionally resonant, singable, and cohesive throughout.'
-            + ' IMPORTANT: Variation seed #' + randomSeed + ' — every generation must feel like a different song. Use a unique metaphor, unusual imagery, or an unexpected narrative arc. Never repeat structures or phrases from previous outputs.'
-            + ' Return a JSON object: { "title": "<creative song title in the lyrics language>", "lyrics": "<full lyrics with \\n between lines>" }'
-            + ' No other text, only valid JSON.';
+        const titleStyles = ['two unexpected words', 'a vivid 3-word phrase', 'a single evocative noun', 'a short poetic fragment', 'an unusual verb phrase'];
+        const randomTitleStyle = titleStyles[Math.floor(Math.random() * titleStyles.length)];
+        const lyricsPrompt = `You are a professional songwriter. Write COMPLETE, FULL-LENGTH song lyrics for a ~3 minute ${genreInfo.name} song.
+
+SETTINGS:
+- Region/Culture: ${countryInfo.name}
+- Mood: ${moodInfo.name}
+- Language: ${vocalLangInfo.label}
+- Perspective: ${randomPerspective}
+- Theme: ${themeText ? '"' + themeText + '"' : 'Choose a completely original, unexpected theme — NOT love, NOT party, NOT success. Be bold and specific.'}
+- Seed: #${randomSeed}
+
+MANDATORY STRUCTURE — write EVERY LINE IN FULL. NEVER use "(repeat)", "(x2)", or any shortcut:
+[Intro] — 4 to 6 lines
+[Verse 1] — 12 lines minimum
+[Pre-Chorus] — 4 to 6 lines
+[Chorus] — 10 lines minimum
+[Verse 2] — 12 lines minimum (completely different content from Verse 1)
+[Pre-Chorus] — 4 to 6 lines (can be same or slight variation)
+[Chorus] — 10 lines minimum (write every line again in full)
+[Bridge] — 8 lines minimum (contrasting emotion or perspective shift)
+[Chorus] — 10 lines minimum (final, written out fully again, can have slight variation)
+[Outro] — 4 to 6 lines
+
+TOTAL: The lyrics field must contain AT LEAST 400 words. Do not truncate. Do not summarize. Write everything.
+
+TITLE RULES:
+- Must be ${randomTitleStyle}
+- Must be in ${vocalLangInfo.label}
+- FORBIDDEN words in title: neon, echo, fire, rise, glow, shine, night, dream, light, soul, burn, fade
+- Must feel fresh and specific to THIS song's theme and seed #${randomSeed}
+- Do NOT use generic title patterns
+
+Respond ONLY with valid JSON (no markdown, no explanation):
+{"title": "<song title>", "lyrics": "<full lyrics — use \\n for line breaks, \\n\\n between sections>"}`;
+
 
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
         let response, lastErr;
@@ -2184,7 +2198,7 @@ app.post('/api/generate-lyrics', verifyToken, async (req, res) => {
                 response = await ai.models.generateContent({
                     model: GEMINI_MODEL,
                     contents: lyricsPrompt,
-                    config: { temperature: 1.2, topP: 0.95 }
+                    config: { temperature: 1.2, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
                 });
                 break;
             } catch (e) {
