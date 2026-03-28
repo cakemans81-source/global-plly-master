@@ -634,6 +634,30 @@ const CREATIVITY_MAP = {
     crazy: { label: '🌀 짬뽕 모드' }
 };
 
+// ── 제목 다양성 시스템 ──
+const TITLE_CATEGORIES = [
+    'a body sensation or physical feeling (e.g. "Chest Compression", "Jaw Tension")',
+    'a specific place + time combination (e.g. "Hongdae 3AM", "Rooftop Thursday")',
+    'an unexpected verb phrase in progress (e.g. "Forgetting the Pattern", "Swallowing Static")',
+    'a color + unexpected noun (e.g. "Chalk Blue Signal", "Grey Frequency")',
+    'a number + concrete noun (e.g. "Seven Exits", "Fourth Floor Silence")',
+    'a weather phenomenon repurposed (e.g. "Dry Thunder Season", "Fog Index")',
+    'a material or texture word (e.g. "Cotton Glass", "Corrugated Heat")',
+    'a relationship dynamic (e.g. "Mutual Suspicion", "Parallel Distance")',
+    'a technical term used poetically (e.g. "Signal Decay", "Latency Window")',
+    'a single unexpected concrete noun (e.g. "Guardrail", "Residue", "Overhang")',
+    'a short question fragment (e.g. "Who Counted That?", "Still Here?")',
+    'an animal + emotion (e.g. "Crow Patience", "Moth Certainty")',
+];
+const TITLE_FORBIDDEN = 'neon, echo, fire, rise, glow, shine, night, dream, light, soul, burn, fade, shadow, wave, star, dance, love, heart, power, glory, pulse, electric, blazing, fire, spark';
+function pickTitleCategory() {
+    return TITLE_CATEGORIES[Math.floor(Math.random() * TITLE_CATEGORIES.length)];
+}
+function assignedTitleCategories(n) {
+    const shuffled = [...TITLE_CATEGORIES].sort(() => Math.random() - 0.5);
+    return Array.from({ length: n }, (_, i) => shuffled[i % shuffled.length]);
+}
+
 const VOCAL_LANG_MAP = {
     auto: { label: '🤖 자동 (국가 맞춤)', tag: '' },
     korean: { label: '🇰🇷 한국어', tag: 'Korean lyrics' },
@@ -2054,17 +2078,24 @@ Format:
 - Always include BPM + key
 - Use SPECIFIC instrument names
 - Include language tag if specified (e.g. "Korean lyrics", "sung in Japanese")
-- Title is a short 2-4 word descriptor label (not a song name), in the lyrics language
+- Title: short 2-4 word label (not a song name) in the lyrics language
+- FORBIDDEN title words: ${TITLE_FORBIDDEN}
+- Each title must follow its assigned category (listed in user context)
 - Seed: #${Math.floor(Math.random() * 999999)} — outputs must vary each call`;
 
         // ── 사용자 컨텍스트 ──
+        const titleCats = assignedTitleCategories(promptCount);
+        const titleCatList = titleCats.map((c, i) => `  #${i+1}: ${c}`).join('\n');
         const userContext = `Generate ${promptCount} Suno AI V5 prompt(s) for:
 - Country/Region: ${countryInfo.name} (instruments: ${(countryInfo.instruments || []).join(', ')})
 - Genre: ${genreInfo.name} | BPM range: ${genreInfo.bpm} | Notes: ${genreInfo.style}
 - Mood: ${moodInfo.name} — ${moodInfo.description || ''}
 - Tempo: ${tempo} | Vocal: ${vocal || 'auto'} | Structure: ${structure || 'standard'}
 - Lyrics language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` (tag: "${vocalLangInfo.tag}")` : ''}
-${subStyleLabels ? `- Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\n- Reference artists: ${refArtist} — match their production aesthetics` : ''}${themeText ? `\n- Theme: "${themeText}"` : ''}`;
+${subStyleLabels ? `- Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\n- Reference artists: ${refArtist} — match their production aesthetics` : ''}${themeText ? `\n- Theme: "${themeText}"` : ''}
+
+TITLE CATEGORY ASSIGNMENTS (each track must follow its category):
+${titleCatList}`;
 
         // ── Gemini API 호출 ──
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -2143,8 +2174,7 @@ app.post('/api/generate-lyrics', verifyToken, async (req, res) => {
         const perspectives = ['first-person singular', 'first-person plural', 'second-person', 'third-person narrative'];
         const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
         const randomSeed = Math.floor(Math.random() * 999999);
-        const titleStyles = ['two unexpected words', 'a vivid 3-word phrase', 'a single evocative noun', 'a short poetic fragment', 'an unusual verb phrase'];
-        const randomTitleStyle = titleStyles[Math.floor(Math.random() * titleStyles.length)];
+        const randomTitleStyle = pickTitleCategory();
         const lyricsPrompt = `You are a professional songwriter. Write COMPLETE, FULL-LENGTH song lyrics for a ~3 minute ${genreInfo.name} song.
 
 SETTINGS:
@@ -2172,7 +2202,7 @@ TOTAL: The lyrics field must contain AT LEAST 400 words. Do not truncate. Do not
 TITLE RULES:
 - Must be ${randomTitleStyle}
 - Must be in ${vocalLangInfo.label}
-- FORBIDDEN words in title: neon, echo, fire, rise, glow, shine, night, dream, light, soul, burn, fade
+- FORBIDDEN words in title: ${TITLE_FORBIDDEN}
 - Must feel fresh and specific to THIS song's theme and seed #${randomSeed}
 - Do NOT use generic title patterns
 
@@ -2273,22 +2303,27 @@ app.post('/api/generate-advanced-batch', verifyToken, async (req, res) => {
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
         // ── Step 1: 스타일 프롬프트 + 제목 N개 배치 생성 (빠름) ──
+        const batchTitleCats = assignedTitleCategories(batchCount);
+        const batchTitleCatList = batchTitleCats.map((c, i) => `  #${i+1}: ${c}`).join('\n');
+
         const styleSystemPrompt = `You are an elite Suno AI V5 prompt engineer.
 Output ONLY a valid JSON array with EXACTLY ${batchCount} objects. No markdown, no explanation.
 Format: [{"prompt": "<V5 style, max 200 chars, English>", "title": "<song title in ${vocalLangInfo.label}>", "styleTheme": "<1-sentence theme/mood for this track>"}, ...]
 
 Rules:
-- Each prompt uses the 7-step formula: genre + BPM/key + mood + instruments (specific) + vocal style + era/production + 1 evocative phrase
-- FORBIDDEN title words: neon, echo, fire, rise, glow, shine, night, dream, light, soul, burn, fade
+- Each prompt: genre + exact BPM/key + mood + specific instruments + vocal style + era/production + 1 evocative phrase
+- FORBIDDEN title words: ${TITLE_FORBIDDEN}
 - Every prompt must feel DISTINCTLY different — vary energy, instruments, and era
-- Energy spectrum: tracks 1-3 soft/warm, 4-6 mid-energy, 7-9 intense/peak, 10 experimental
-- Title must be specific to the theme — not generic`;
+- Energy spectrum: #1-3 soft/warm, #4-6 mid-energy, #7-9 intense/peak, #10 experimental
+- Each title must follow its ASSIGNED CATEGORY below — no exceptions
+
+TITLE CATEGORY ASSIGNMENTS:
+${batchTitleCatList}
+Seed: #${Math.floor(Math.random() * 999999)}`;
 
         const styleUserPrompt = `Country: ${countryInfo.name} | Genre: ${genreInfo.name} | Mood: ${moodInfo.name}
 Tempo: ${tempo} | Vocal: ${vocal || 'auto'} | Language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` (tag: "${vocalLangInfo.tag}")` : ''}
-${subStyleLabels ? `Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\nReference artists: ${refArtist}` : ''}
-${themeText ? `Theme: "${themeText}"` : ''}
-Seed: #${Math.floor(Math.random() * 999999)}`;
+${subStyleLabels ? `Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\nReference artists: ${refArtist}` : ''}${themeText ? `\nTheme: "${themeText}"` : ''}`;
 
         const styleResp = await ai.models.generateContent({
             model: GEMINI_MODEL,
