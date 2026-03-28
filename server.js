@@ -2002,7 +2002,7 @@ app.post('/api/generate-prompts', verifyToken, async (req, res) => {
             });
         }
 
-        const { country, genre, mood, tempo, vocal, structure, vocalLang, subStyles, refArtist, themeText, count, customLyrics, customStyle } = req.body;
+        const { country, genre, mood, tempo, vocal, structure, vocalLang, subStyles, refArtist, themeText, count } = req.body;
         const promptCount = (count === 1) ? 1 : 10;
 
         if (!country || !genre || !mood || !tempo) {
@@ -2024,58 +2024,47 @@ app.post('/api/generate-prompts', verifyToken, async (req, res) => {
             .map(id => subStyleList.find(s => s.id === id)?.label)
             .filter(Boolean).join(', ');
 
-        // ── 시스템 프롬프트 (Suno AI V5 최적화 — NotebookLM 핵심 원칙 반영) ──
-        const systemPrompt = `You are an elite Suno AI V5 prompt engineer. Your prompts consistently go viral.
-Your ONLY output is a valid JSON array with EXACTLY 10 objects. No markdown, no explanation, no extra text.
+        // ── 시스템 프롬프트 (Suno AI V5 최적화) ──
+        const energySpectrum = promptCount === 10 ? `
+=== ENERGY SPECTRUM (mandatory for 10 prompts) ===
+- #1-3: SOFT/WARM — intimate, acoustic, gentle energy
+- #4-6: MID — groovy, balanced, melodic
+- #7-9: INTENSE/PEAK — aggressive, euphoric, powerful
+- #10: EXPERIMENTAL — unexpected fusion or avant-garde twist
+Each prompt must feel DISTINCTLY different in energy, instruments, and era.` : `
+Make this prompt capture the BEST possible version of the requested style.`;
 
-Output format (strict):
-[
-  {"prompt": "<V5-optimized style prompt, max 220 chars, English only>", "title": "<creative song title in the target language>", "lyrics": "<Full song lyrics including [Intro], [Verse], [Chorus], and [Outro] in the target language>"},
-  ...
-]
+        const systemPrompt = `You are an elite Suno AI V5 prompt engineer.
+Output ONLY a valid JSON array with EXACTLY ${promptCount} object(s). No markdown, no explanation.
 
-=== V5 PROMPT FORMULA (apply to EVERY prompt) ===
-Structure each prompt using this 7-step director format:
-1. GENRE: Specific sub-genre (e.g. "dark indie folk", "melodic trap", "city pop revival")
-2. BPM & KEY: Always include exact BPM and musical key (e.g. "92 BPM, F Minor", "128 BPM, A Major")
-3. MOOD & ENERGY: 1-2 precise emotional descriptors (e.g. "melancholic longing", "euphoric rush")
-4. INSTRUMENTS: Specific instrument names — NOT generic (e.g. "fingerpicked acoustic guitar, lo-fi electric piano, subtle vinyl crackle" NOT "guitar, piano")
-5. VOCAL STYLE: Gender + tone + technique (e.g. "breathy female vocals, soft falsetto", "gritty male baritone, ad-libs")
-6. ERA & PRODUCTION: Sonic texture and mix vibe (e.g. "late 90s nostalgia, warm analog tape saturation", "2024 hyperpop production, crystal clear mix")
-7. NARRATIVE (optional but powerful): 1 short evocative phrase in quotes (e.g. "like watching rain on a neon-lit window")
+Format:
+[{"prompt": "<style prompt, max 200 chars, English only>", "title": "<short track label in the lyrics language>"}, ...]
 
-=== 10-PROMPT ENERGY SPECTRUM (mandatory distribution) ===
-- Prompts 1-3: SOFT / WARM (intimate, acoustic, gentle)
-- Prompts 4-6: MID ENERGY (groovy, balanced, melodic)  
-- Prompts 7-9: INTENSE / PEAK (aggressive, euphoric, powerful)
-- Prompt 10: EXPERIMENTAL / UNIQUE (unexpected fusion or avant-garde twist)
+=== V5 PROMPT FORMULA (mandatory for every prompt) ===
+1. GENRE: specific sub-genre (e.g. "dark indie folk", "melodic trap", "city pop revival")
+2. BPM + KEY: exact values (e.g. "98 BPM, E Minor")
+3. MOOD: 1-2 precise emotional words (e.g. "euphoric rush", "melancholic longing")
+4. INSTRUMENTS: specific names only — never generic (e.g. "fingerpicked acoustic guitar, lo-fi Rhodes, vinyl crackle" — NOT "guitar, piano")
+5. VOCAL: gender + tone + technique (e.g. "breathy female falsetto", "gritty male baritone with ad-libs")
+6. ERA/PRODUCTION: sonic texture (e.g. "2024 hyperpop, crystal mix", "late 90s analog tape warmth")
+7. HOOK PHRASE (optional): 1 evocative phrase in quotes${energySpectrum}
 
-=== CRITICAL RULES ===
-- ALWAYS include exact BPM and key (this is the #1 V5 improvement)
-- Use SPECIFIC instrument names, never vague terms
-- Each of the 10 prompts must feel distinctly different in energy and texture
-- Include vocal language tag if specified (e.g. "Korean lyrics", "sung in Japanese")
-- Max 220 characters per prompt
-- Title must be evocative and match the mood (can be in the target language if specified)
-- The 'lyrics' field MUST contain the full song lyrics. It MUST structurally include an [Intro], at least one [Verse] and [Chorus], and an [Outro].`;
+=== HARD RULES ===
+- Max 200 characters per prompt (count carefully)
+- Always include BPM + key
+- Use SPECIFIC instrument names
+- Include language tag if specified (e.g. "Korean lyrics", "sung in Japanese")
+- Title is a short 2-4 word descriptor label (not a song name), in the lyrics language
+- Seed: #${Math.floor(Math.random() * 999999)} — outputs must vary each call`;
 
         // ── 사용자 컨텍스트 ──
-        const userContext = `Generate 10 V5-optimized Suno AI prompts for these settings:
-
-- Target Country/Region: ${countryInfo.name}
-  → Traditional instruments to consider: ${(countryInfo.instruments || []).join(', ')}
-- Genre: ${genreInfo.name} | Typical BPM range: ${genreInfo.bpm} | Style notes: ${genreInfo.style}
+        const userContext = `Generate ${promptCount} Suno AI V5 prompt(s) for:
+- Country/Region: ${countryInfo.name} (instruments: ${(countryInfo.instruments || []).join(', ')})
+- Genre: ${genreInfo.name} | BPM range: ${genreInfo.bpm} | Notes: ${genreInfo.style}
 - Mood: ${moodInfo.name} — ${moodInfo.description || ''}
-- Tempo preference: ${tempo}
-- Vocal type: ${vocal || 'auto'}
-- Song structure: ${structure || 'standard'}
-- Lyrics language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` → always include tag: "${vocalLangInfo.tag}"` : ''}
-${subStyleLabels ? `- Sub-styles/flavor: ${subStyleLabels}` : ''}
-${refArtist ? `- Reference artist(s): ${refArtist} — mirror their production aesthetics and vocal delivery style` : ''}
-${themeText ? `- Theme/Story concept: "${themeText}" — weave this into the narrative element of each prompt` : ''}
-
-${customStyle ? '- VERY IMPORTANT OVERRIDE for style/genre/vibe: "' + customStyle + '"\n' : ''}${customLyrics ? '- VERY IMPORTANT OVERRIDE for lyrics: Use the exact lyrics provided here for all 10 generations, minimally adjusting them to fit the mood: "' + customLyrics + '"\n' : ''}
-REMINDER: Apply the full V5 7-step formula. Vary energy from soft→intense across 10 prompts. Always include BPM+Key.`;
+- Tempo: ${tempo} | Vocal: ${vocal || 'auto'} | Structure: ${structure || 'standard'}
+- Lyrics language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` (tag: "${vocalLangInfo.tag}")` : ''}
+${subStyleLabels ? `- Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\n- Reference artists: ${refArtist} — match their production aesthetics` : ''}${themeText ? `\n- Theme: "${themeText}"` : ''}`;
 
         // ── Gemini API 호출 ──
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
