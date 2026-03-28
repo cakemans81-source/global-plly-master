@@ -2199,15 +2199,16 @@ MANDATORY STRUCTURE — write EVERY LINE IN FULL. NEVER use "(repeat)", "(x2)", 
 
 TOTAL: The lyrics field must contain AT LEAST 400 words. Do not truncate. Do not summarize. Write everything.
 
-TITLE RULES:
-- Must be ${randomTitleStyle}
-- Must be in ${vocalLangInfo.label}
-- FORBIDDEN words in title: ${TITLE_FORBIDDEN}
-- Must feel fresh and specific to THIS song's theme and seed #${randomSeed}
-- Do NOT use generic title patterns
+TITLE RULES (derive the title FROM the completed lyrics — not before):
+- Read the full lyrics you just wrote, then pick a title that captures its unique emotional core or a specific image/phrase from within it
+- Style: ${randomTitleStyle}
+- Language: ${vocalLangInfo.label}
+- FORBIDDEN words: ${TITLE_FORBIDDEN}
+- The title must feel like it could ONLY belong to THIS specific song — not reusable for any other song
+- Do NOT use the most obvious phrase from the chorus — find something more subtle and specific
 
 Respond ONLY with valid JSON (no markdown, no explanation):
-{"title": "<song title>", "lyrics": "<full lyrics — use \\n for line breaks, \\n\\n between sections>"}`;
+{"title": "<title derived from the lyrics>", "lyrics": "<full lyrics — use \\n for line breaks, \\n\\n between sections>"}`;
 
 
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -2302,24 +2303,16 @@ app.post('/api/generate-advanced-batch', verifyToken, async (req, res) => {
 
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-        // ── Step 1: 스타일 프롬프트 + 제목 N개 배치 생성 (빠름) ──
-        const batchTitleCats = assignedTitleCategories(batchCount);
-        const batchTitleCatList = batchTitleCats.map((c, i) => `  #${i+1}: ${c}`).join('\n');
-
+        // ── Step 1: 스타일 프롬프트 N개 배치 생성 (제목 없음 — 가사 완성 후 추출) ──
         const styleSystemPrompt = `You are an elite Suno AI V5 prompt engineer.
 Output ONLY a valid JSON array with EXACTLY ${batchCount} objects. No markdown, no explanation.
-Format: [{"prompt": "<V5 style, max 200 chars, English>", "title": "<song title in ${vocalLangInfo.label}>", "styleTheme": "<1-sentence theme/mood for this track>"}, ...]
+Format: [{"prompt": "<V5 style, max 200 chars, English>", "styleTheme": "<1-sentence theme/mood for this track>"}, ...]
 
 Rules:
 - Each prompt: genre + exact BPM/key + mood + specific instruments + vocal style + era/production + 1 evocative phrase
-- FORBIDDEN title words: ${TITLE_FORBIDDEN}
 - Every prompt must feel DISTINCTLY different — vary energy, instruments, and era
 - Energy spectrum: #1-3 soft/warm, #4-6 mid-energy, #7-9 intense/peak, #10 experimental
-- Each title must follow its ASSIGNED CATEGORY below — no exceptions
-
-TITLE CATEGORY ASSIGNMENTS:
-${batchTitleCatList}
-Seed: #${Math.floor(Math.random() * 999999)}`;
+- Seed: #${Math.floor(Math.random() * 999999)}`;
 
         const styleUserPrompt = `Country: ${countryInfo.name} | Genre: ${genreInfo.name} | Mood: ${moodInfo.name}
 Tempo: ${tempo} | Vocal: ${vocal || 'auto'} | Language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` (tag: "${vocalLangInfo.tag}")` : ''}
@@ -2372,10 +2365,16 @@ MANDATORY STRUCTURE — write EVERY LINE IN FULL. NEVER use "(repeat)", "(x2)", 
 
 TOTAL: AT LEAST 400 words. Do not truncate. Write everything.
 
-TITLE: Already set to "${styleItem.title}" — do NOT change it.
+TITLE RULES (derive the title AFTER writing the full lyrics):
+- Read the lyrics you just wrote, then extract a title that captures the unique emotional core or a vivid specific image from within it
+- Style: ${pickTitleCategory()}
+- Language: ${vocalLangInfo.label}
+- FORBIDDEN words: ${TITLE_FORBIDDEN}
+- The title must feel like it belongs ONLY to this specific song — not reusable for any other song
+- Do NOT use the most obvious phrase from the chorus — find something more subtle
 
 Respond ONLY with valid JSON:
-{"lyrics": "<full lyrics — \\n between lines, \\n\\n between sections>"}`;
+{"title": "<title derived from the completed lyrics>", "lyrics": "<full lyrics — \\n between lines, \\n\\n between sections>"}`;
 
             try {
                 const lyricsResp = await ai.models.generateContent({
@@ -2386,13 +2385,13 @@ Respond ONLY with valid JSON:
                 const raw = (lyricsResp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
                 try {
                     const parsed = JSON.parse(raw);
-                    return parsed.lyrics || raw;
+                    return { title: parsed.title || '', lyrics: parsed.lyrics || raw };
                 } catch(e) {
-                    return raw;
+                    return { title: '', lyrics: raw };
                 }
             } catch(e) {
                 console.error(`lyrics job ${idx} failed:`, e.message);
-                return '';
+                return { title: '', lyrics: '' };
             }
         });
 
@@ -2405,12 +2404,12 @@ Respond ONLY with valid JSON:
             lyricsResults.push(...results);
         }
 
-        // ── 결합 ──
+        // ── 결합 (제목은 가사에서 추출된 값 사용) ──
         const finalResults = styleBatch.map((item, i) => ({
             index: i + 1,
-            title: item.title || `Track ${i + 1}`,
+            title: lyricsResults[i]?.title || `Track ${i + 1}`,
             prompt: (item.prompt || '').substring(0, 220),
-            lyrics: lyricsResults[i] || ''
+            lyrics: lyricsResults[i]?.lyrics || ''
         }));
 
         console.log(`✅ /api/generate-advanced-batch: ${finalResults.length}개 생성 완료 (user: ${req.user.username})`);
