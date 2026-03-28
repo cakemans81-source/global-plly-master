@@ -817,102 +817,6 @@
       document.getElementById('gender-auto').style.cssText   += g === 'auto'   ? active : inactive;
     }
 
-    async function generateLyricsAI() {
-      const btn  = document.getElementById('btn-gen-lyrics');
-      const icon = document.getElementById('lyrics-btn-icon');
-      const area = document.getElementById('advanced-lyrics');
-      icon.textContent = '⏳'; btn.disabled = true;
-      try {
-        const token = localStorage.getItem('gpm_token');
-        const resp = await fetch('/api/generate-lyrics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({
-            country:   countrySelect.value,
-            genre:     genreSelect.value,
-            mood:      moodSelect.value,
-            themeText: (document.getElementById('theme-text') || {value:''}).value.trim(),
-            vocalLang: (document.getElementById('vocal-lang-select') || {value:'ko'}).value,
-            weirdness: parseInt((document.getElementById('weirdness-slider') || {value:'50'}).value) || 50
-          })
-        });
-        // 응답이 JSON이 아닐 경우 대비
-        const rawText = await resp.text();
-        let data;
-        try { data = JSON.parse(rawText); } catch(e) {
-          showToast('가사 생성 실패: HTTP ' + resp.status + ' — ' + rawText.substring(0, 60), 'error');
-          return;
-        }
-        if (resp.status === 403 || resp.status === 401) {
-          showToast('⏰ 세션이 만료되었습니다. 다시 로그인해주세요.', 'error');
-          setTimeout(() => { window.location.href = '/logout'; }, 2500);
-          return;
-        }
-        if (data.success) {
-          if (data.title) document.getElementById('lyrics-title').value = data.title;
-          area.value = data.lyrics;
-          showToast('🎤 가사가 생성되었습니다!', 'success');
-        } else {
-          showToast('가사 생성 실패: ' + (data.error || 'HTTP ' + resp.status), 'error');
-        }
-      } catch (e) {
-        showToast('네트워크 오류: ' + e.message, 'error');
-      } finally {
-        icon.textContent = '✨'; btn.disabled = false;
-      }
-    }
-
-    async function generateStyleAI() {
-      const btn  = document.getElementById('btn-gen-style');
-      const icon = document.getElementById('style-btn-icon');
-      const area = document.getElementById('advanced-style');
-      icon.textContent = '⏳'; btn.disabled = true;
-      try {
-        const token = localStorage.getItem('gpm_token');
-        const resp = await fetch('/api/generate-style', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({
-            country:        countrySelect.value,
-            genre:          genreSelect.value,
-            mood:           moodSelect.value,
-            subStyles:      selectedSubStyles,
-            refArtist:      (document.getElementById('ref-artist-input') || {value:''}).value.trim(),
-            weirdness:      parseInt((document.getElementById('weirdness-slider') || {value:'50'}).value) || 50,
-            styleInfluence: parseInt((document.getElementById('style-influence-slider') || {value:'50'}).value) || 50
-          })
-        });
-        const rawStyle = await resp.text();
-        let data;
-        try { data = JSON.parse(rawStyle); } catch(e) {
-          showToast('스타일 생성 실패: HTTP ' + resp.status, 'error');
-          return;
-        }
-        if (resp.status === 403 || resp.status === 401) {
-          showToast('⏰ 세션이 만료되었습니다. 다시 로그인해주세요.', 'error');
-          setTimeout(() => { window.location.href = '/logout'; }, 2500);
-          return;
-        }
-        if (data.success) {
-          area.value = data.style;
-          // 태그 미리보기
-          const preview = document.getElementById('style-tags-preview');
-          const tags = data.style.split(',').map(t => t.trim()).filter(Boolean);
-          preview.innerHTML = tags.map(t =>
-            '<span style="background:rgba(6,182,212,0.15); border:1px solid rgba(6,182,212,0.3); border-radius:20px; padding:2px 10px; font-size:11px; color:#67e8f9; font-weight:600;">' + t + '</span>'
-          ).join('');
-          preview.classList.remove('hidden');
-          showToast('🎨 스타일이 추천되었습니다!', 'success');
-        } else {
-          showToast('스타일 생성 실패: ' + (data.error || '오류'), 'error');
-        }
-      } catch (e) {
-        showToast('네트워크 오류', 'error');
-      } finally {
-        icon.textContent = '✨'; btn.disabled = false;
-      }
-    }
-
     // ─── Change handlers ───
     countrySelect.addEventListener('change', () => {
       const info = COUNTRY_STYLES[countrySelect.value];
@@ -1109,7 +1013,6 @@
       grid.innerHTML = '';
       prompts.forEach((p, i) => {
         const escaped = (p.prompt || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        const escapedLyrics = (p.lyrics || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         const card = document.createElement('div');
         card.className = 'prompt-card';
         card.id = `card-${i}`;
@@ -1120,14 +1023,11 @@
               <span class="text-sm font-bold text-[var(--md-sys-color-on-surface)] truncate" style="max-width:200px;">${p.title || 'Track ' + p.index}</span>
             </div>
             <div class="flex items-center gap-2">
-              <button id="copy-btn-style-${i}" class="btn-copy text-xs" onclick="copyStyle(${i})">✨ 스타일</button>
-              <button id="copy-btn-lyrics-${i}" class="btn-copy text-xs" onclick="copyLyrics(${i})">🎤 가사</button>
+              <button id="copy-btn-style-${i}" class="btn-copy text-xs" onclick="copyStyle(${i})">📋 복사</button>
             </div>
           </div>
           <div class="text-xs text-[var(--md-sys-color-primary)] mb-1 font-bold tracking-tight">Style Prompt</div>
-          <div class="prompt-text mb-3" style="max-height:80px; overflow-y:auto;">${escaped}</div>
-          <div class="text-xs text-[var(--md-sys-color-primary)] mb-1 font-bold tracking-tight">Full Lyrics</div>
-          <div class="prompt-text" style="max-height:120px; overflow-y:auto; white-space:pre-wrap; font-size:12px; line-height:1.6;">${escapedLyrics || '가사가 포함되지 않았습니다.'}</div>
+          <div class="prompt-text" style="max-height:120px; overflow-y:auto;">${escaped}</div>
         `;
         grid.appendChild(card);
       });
@@ -1148,27 +1048,17 @@
       showToast(`#${_prompts[i].index} 스타일 복사 완료!`, 'success');
     }
 
-    function copyLyrics(i) {
-      if (!_prompts[i]) return;
-      copyText(_prompts[i].lyrics || '');
-      const btn = document.getElementById('copy-btn-lyrics-' + i);
-      if (btn) { btn.textContent = '✅ 저장됨'; btn.classList.add('copied'); }
-      showToast(`#${_prompts[i].index} 가사 복사 완료!`, 'success');
-    }
-
     function copyAllPrompts() {
       if (!_prompts.length) return;
-      const all = _prompts.map(p => `[#${p.index}] ${p.title}\n[Style]\n${p.prompt}\n\n[Lyrics]\n${p.lyrics || ''}`).join('\n\n---\n\n');
+      const all = _prompts.map(p => `[#${p.index}] ${p.title}\n${p.prompt}`).join('\n\n---\n\n');
       copyText(all);
       _prompts.forEach((_, i) => {
         _copied[i] = true;
-        const btnStyle = document.getElementById('copy-btn-style-' + i);
-        const btnLyrics = document.getElementById('copy-btn-lyrics-' + i);
-        if (btnStyle) { btnStyle.textContent = '✅ 저장됨'; btnStyle.classList.add('copied'); }
-        if (btnLyrics) { btnLyrics.textContent = '✅ 저장됨'; btnLyrics.classList.add('copied'); }
+        const btn = document.getElementById('copy-btn-style-' + i);
+        if (btn) { btn.textContent = '✅ 저장됨'; btn.classList.add('copied'); }
       });
       updateCopyProgress();
-      showToast('스타일 & 가사 전체 세트 복사 완료!', 'success');
+      showToast('프롬프트 전체 복사 완료!', 'success');
     }
 
     // ══════════════════════════════════════════════════════
