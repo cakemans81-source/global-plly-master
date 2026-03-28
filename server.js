@@ -2266,6 +2266,139 @@ app.post('/api/generate-style', verifyToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// 🎵 고급 모드 - 배치 생성 API (스타일 + 제목 + 풀가사 세트)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/generate-advanced-batch', verifyToken, async (req, res) => {
+    try {
+        if (!GEMINI_API_KEY) return res.status(503).json({ success: false, error: 'API 키 없음' });
+        const { country, genre, mood, tempo, vocal, vocalLang, subStyles, refArtist, themeText, count } = req.body;
+        const batchCount = (count === 1) ? 1 : 10;
+
+        const countryInfo   = COUNTRY_STYLES[country]  || { name: country || 'Global', instruments: [], vibes: [] };
+        const genreInfo     = GENRE_MAP[genre]          || { name: genre  || 'Pop', tags: [], bpm: tempo, style: '' };
+        const moodInfo      = MOOD_MAP[mood]            || { name: mood   || 'Energetic', tags: [], description: '' };
+        const vocalLangInfo = VOCAL_LANG_MAP[vocalLang] || { label: 'Korean', tag: '' };
+        const subStyleList  = SUBSTYLE_MAP[genre] || [];
+        const subStyleLabels = (subStyles || []).map(id => subStyleList.find(s => s.id === id)?.label).filter(Boolean).join(', ');
+
+        const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+        // ── Step 1: 스타일 프롬프트 + 제목 N개 배치 생성 (빠름) ──
+        const styleSystemPrompt = `You are an elite Suno AI V5 prompt engineer.
+Output ONLY a valid JSON array with EXACTLY ${batchCount} objects. No markdown, no explanation.
+Format: [{"prompt": "<V5 style, max 200 chars, English>", "title": "<song title in ${vocalLangInfo.label}>", "styleTheme": "<1-sentence theme/mood for this track>"}, ...]
+
+Rules:
+- Each prompt uses the 7-step formula: genre + BPM/key + mood + instruments (specific) + vocal style + era/production + 1 evocative phrase
+- FORBIDDEN title words: neon, echo, fire, rise, glow, shine, night, dream, light, soul, burn, fade
+- Every prompt must feel DISTINCTLY different — vary energy, instruments, and era
+- Energy spectrum: tracks 1-3 soft/warm, 4-6 mid-energy, 7-9 intense/peak, 10 experimental
+- Title must be specific to the theme — not generic`;
+
+        const styleUserPrompt = `Country: ${countryInfo.name} | Genre: ${genreInfo.name} | Mood: ${moodInfo.name}
+Tempo: ${tempo} | Vocal: ${vocal || 'auto'} | Language: ${vocalLangInfo.label}${vocalLangInfo.tag ? ` (tag: "${vocalLangInfo.tag}")` : ''}
+${subStyleLabels ? `Sub-styles: ${subStyleLabels}` : ''}${refArtist ? `\nReference artists: ${refArtist}` : ''}
+${themeText ? `Theme: "${themeText}"` : ''}
+Seed: #${Math.floor(Math.random() * 999999)}`;
+
+        const styleResp = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [{ role: 'user', parts: [{ text: styleSystemPrompt + '\n\n' + styleUserPrompt }] }],
+            config: { temperature: 1.1, topP: 0.95 }
+        });
+        const styleRaw = (styleResp.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json/g,'').replace(/```/g,'').trim();
+        let styleBatch;
+        try {
+            styleBatch = JSON.parse(styleRaw);
+            if (!Array.isArray(styleBatch)) throw new Error('not array');
+        } catch(e) {
+            return res.status(502).json({ success: false, error: '스타일 생성 파싱 실패. 다시 시도해주세요.' });
+        }
+        styleBatch = styleBatch.slice(0, batchCount);
+
+        // ── Step 2: 가사 N개 병렬 생성 (각각 풀가사, 400+ 단어) ──
+        const perspectives = ['first-person singular', 'first-person plural', 'second-person', 'third-person narrative'];
+
+        const lyricsJobs = styleBatch.map((styleItem, idx) => async () => {
+            const seed = Math.floor(Math.random() * 999999);
+            const perspective = perspectives[Math.floor(Math.random() * perspectives.length)];
+            const chosenTheme = themeText || styleItem.styleTheme || null;
+
+            const lyricsPrompt = `You are a professional songwriter. Write COMPLETE, FULL-LENGTH song lyrics for a ~3 minute ${genreInfo.name} song.
+
+SETTINGS:
+- Region/Culture: ${countryInfo.name}
+- Mood: ${moodInfo.name}
+- Language: ${vocalLangInfo.label}
+- Perspective: ${perspective}
+- Theme: ${chosenTheme ? '"' + chosenTheme + '"' : 'Choose a completely original, unexpected theme — NOT love, NOT party, NOT success.'}
+- Seed: #${seed} (track ${idx + 1} of ${batchCount})
+
+MANDATORY STRUCTURE — write EVERY LINE IN FULL. NEVER use "(repeat)", "(x2)", or shortcuts:
+[Intro] — 4 to 6 lines
+[Verse 1] — 12 lines minimum
+[Pre-Chorus] — 4 to 6 lines
+[Chorus] — 10 lines minimum
+[Verse 2] — 12 lines minimum (completely different content from Verse 1)
+[Pre-Chorus] — 4 to 6 lines
+[Chorus] — 10 lines minimum (write every line in full again)
+[Bridge] — 8 lines minimum (contrasting emotion or perspective shift)
+[Chorus] — 10 lines minimum (final, written out fully, slight variation allowed)
+[Outro] — 4 to 6 lines
+
+TOTAL: AT LEAST 400 words. Do not truncate. Write everything.
+
+TITLE: Already set to "${styleItem.title}" — do NOT change it.
+
+Respond ONLY with valid JSON:
+{"lyrics": "<full lyrics — \\n between lines, \\n\\n between sections>"}`;
+
+            try {
+                const lyricsResp = await ai.models.generateContent({
+                    model: GEMINI_MODEL,
+                    contents: lyricsPrompt,
+                    config: { temperature: 1.2, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
+                });
+                const raw = (lyricsResp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
+                try {
+                    const parsed = JSON.parse(raw);
+                    return parsed.lyrics || raw;
+                } catch(e) {
+                    return raw;
+                }
+            } catch(e) {
+                console.error(`lyrics job ${idx} failed:`, e.message);
+                return '';
+            }
+        });
+
+        // 병렬 실행 (최대 5개 동시, Vercel 60s 내 완료)
+        const CONCURRENCY = 5;
+        const lyricsResults = [];
+        for (let i = 0; i < lyricsJobs.length; i += CONCURRENCY) {
+            const chunk = lyricsJobs.slice(i, i + CONCURRENCY);
+            const results = await Promise.all(chunk.map(fn => fn()));
+            lyricsResults.push(...results);
+        }
+
+        // ── 결합 ──
+        const finalResults = styleBatch.map((item, i) => ({
+            index: i + 1,
+            title: item.title || `Track ${i + 1}`,
+            prompt: (item.prompt || '').substring(0, 220),
+            lyrics: lyricsResults[i] || ''
+        }));
+
+        console.log(`✅ /api/generate-advanced-batch: ${finalResults.length}개 생성 완료 (user: ${req.user.username})`);
+        res.json({ success: true, data: finalResults });
+
+    } catch (err) {
+        console.error('generate-advanced-batch error:', err);
+        res.status(500).json({ success: false, error: err.message || '서버 오류' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
 // 🎨 이미지 AI 프롬프트 생성 엔진 (고급 버전)
 // 플레이리스트 컨셉 → Midjourney / DALL-E / Niji / SD / NanoBanana
 // ═══════════════════════════════════════════════════════════════

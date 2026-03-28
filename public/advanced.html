@@ -523,14 +523,14 @@
           <div class="flex items-center justify-center gap-4 mb-5">
             <span class="text-sm font-bold text-[#9ca3af] uppercase tracking-widest">마스터 프롬프트 생성 개수</span>
             <div class="bg-[#1a1d24] p-1 rounded-full flex gap-1 shadow-inner border border-[rgba(255,255,255,0.05)]">
-              <button id="toggle-count-1" onclick="setPromptCount(1)" class="px-5 py-2 rounded-full text-sm font-bold transition-all border-none" style="background:transparent; color:#94a3b8;">⚡ 1개</button>
-              <button id="toggle-count-10" onclick="setPromptCount(10)" class="px-5 py-2 rounded-full text-sm font-extrabold transition-all border-none" style="background:rgba(139,92,246,0.25); color:#c4b5fd;">🎵 10개 (배치 추천)</button>
+              <button id="toggle-count-1" onclick="setPromptCount(1)" class="px-5 py-2 rounded-full text-sm font-bold transition-all border-none" style="background:transparent; color:#94a3b8;">⚡ 1개 세트</button>
+              <button id="toggle-count-10" onclick="setPromptCount(10)" class="px-5 py-2 rounded-full text-sm font-extrabold transition-all border-none" style="background:rgba(139,92,246,0.25); color:#c4b5fd;">🎵 10개 세트 (배치)</button>
             </div>
           </div>
           <button id="btn-generate" class="btn-generate text-xl font-display font-bold py-5" disabled onclick="generatePrompts()">
             <span id="btn-spinner" class="spinner hidden"></span>
             <span id="btn-icon" class="text-2xl mr-2">🎵</span>
-            <span id="btn-text">프롬프트 10개 자동 생성</span>
+            <span id="btn-text">🎵 10개 세트 생성 (제목+가사+스타일)</span>
           </button>
           <p class="text-center text-xs font-bold #9ca3af mt-4 uppercase tracking-[0.05em] opacity-60">Engineered with Gemini 2.0 Flash</p>
         </div>
@@ -1043,31 +1043,28 @@
       if (n === 1) {
         btn1.style.cssText  = btn1.style.cssText.replace(/background:[^;]+;/g,'').replace(/color:[^;]+;/g,'') + activeStyle;
         btn10.style.cssText = btn10.style.cssText.replace(/background:[^;]+;/g,'').replace(/color:[^;]+;/g,'') + inactiveStyle;
-        if (btnText) btnText.textContent = '⚡ 프롬프트 1개 빠른 생성';
+        if (btnText) btnText.textContent = '⚡ 1개 세트 생성 (제목+가사+스타일)';
         if (btnIcon) btnIcon.textContent = '⚡';
       } else {
         btn10.style.cssText = btn10.style.cssText.replace(/background:[^;]+;/g,'').replace(/color:[^;]+;/g,'') + activeStyle;
         btn1.style.cssText  = btn1.style.cssText.replace(/background:[^;]+;/g,'').replace(/color:[^;]+;/g,'') + inactiveStyle;
-        if (btnText) btnText.textContent = '🎵 프롬프트 10개 자동 생성';
+        if (btnText) btnText.textContent = '🎵 10개 세트 생성 (제목+가사+스타일)';
         if (btnIcon) btnIcon.textContent = '🎵';
       }
     }
 
     // ─── Generate ───
     async function generatePrompts() {
-      const country  = countrySelect.value;
-      const genre    = genreSelect.value;
-      const mood     = moodSelect.value;
-      const tempo    = document.getElementById('select-tempo').value;
-      const vocal    = document.getElementById('vocal-select').value;
+      const country   = countrySelect.value;
+      const genre     = genreSelect.value;
+      const mood      = moodSelect.value;
+      const tempo     = document.getElementById('select-tempo').value;
+      const vocal     = document.getElementById('vocal-select').value;
       const vocalLang = document.getElementById('vocal-lang-select').value;
       const structure = document.getElementById('structure-select').value;
       const refArtist = document.getElementById('ref-artist-input').value.trim();
       const themeText = document.getElementById('theme-text').value.trim();
-      const customLyrics = document.getElementById('advanced-lyrics').value.trim();
-      const customStyle = document.getElementById('advanced-style').value.trim();
 
-      // UI → loading state
       const btn     = document.getElementById('btn-generate');
       const spinner = document.getElementById('btn-spinner');
       const icon    = document.getElementById('btn-icon');
@@ -1075,65 +1072,88 @@
       btn.disabled  = true;
       spinner.classList.remove('hidden');
       icon.classList.add('hidden');
-      btnText.textContent = 'Gemini AI 생성 중...';
 
-      // Hide old results
-      const resultsArea = document.getElementById('results-area');
-      resultsArea.classList.add('hidden');
+      const isMulti = currentPromptCount === 10;
+      btnText.textContent = isMulti
+        ? `⏳ 스타일 생성 중... (1/2)`
+        : `⏳ 생성 중...`;
+
+      document.getElementById('results-area').classList.add('hidden');
 
       try {
         const token = localStorage.getItem('gpm_token');
-        const resp = await fetch('/api/generate-prompts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ country, genre, mood, tempo, vocal, vocalLang, structure, subStyles: selectedSubStyles, refArtist, themeText, customLyrics, customStyle, count: currentPromptCount })
-        });
 
-        const data = await resp.json();
-        if (resp.status === 403 || resp.status === 401) {
-          showToast('⏰ 세션이 만료되었습니다. 다시 로그인해주세요.', 'error');
-          setTimeout(() => { window.location.href = '/logout'; }, 2500);
-          return;
-        }
-        if (!resp.ok || !data.success) {
-          throw new Error(data.error || `서버 오류 (${resp.status})`);
+        if (isMulti) {
+          // ── 고급 배치: 스타일+제목 → 병렬 풀가사 ──
+          btnText.textContent = '⏳ 스타일 10개 생성 중... (1/2)';
+          const resp = await fetch('/api/generate-advanced-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ country, genre, mood, tempo, vocal, vocalLang, structure, subStyles: selectedSubStyles, refArtist, themeText, count: 10 })
+          });
+          if (resp.status === 401 || resp.status === 403) {
+            showToast('⏰ 세션 만료. 다시 로그인해주세요.', 'error');
+            setTimeout(() => { window.location.href = '/logout'; }, 2000); return;
+          }
+          btnText.textContent = '⏳ 풀가사 생성 중... (2/2)';
+          const data = await resp.json();
+          if (!resp.ok || !data.success) throw new Error(data.error || `서버 오류 (${resp.status})`);
+          _prompts = data.data;
+
+        } else {
+          // ── 1개: 가사+스타일 병렬 생성 ──
+          btnText.textContent = '⏳ 가사 & 스타일 생성 중...';
+          const [lyricsResp, styleResp] = await Promise.all([
+            fetch('/api/generate-lyrics', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ country, genre, mood, themeText, vocalLang, weirdness: 50 })
+            }),
+            fetch('/api/generate-style', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ country, genre, mood, subStyles: selectedSubStyles, refArtist, weirdness: 50, styleInfluence: 70 })
+            })
+          ]);
+          if (lyricsResp.status === 401 || lyricsResp.status === 403) {
+            showToast('⏰ 세션 만료. 다시 로그인해주세요.', 'error');
+            setTimeout(() => { window.location.href = '/logout'; }, 2000); return;
+          }
+          const lyricsData = await lyricsResp.json();
+          const styleData  = await styleResp.json();
+          _prompts = [{
+            index: 1,
+            title:  lyricsData.title  || 'Track 1',
+            lyrics: lyricsData.lyrics || '',
+            prompt: styleData.style   || ''
+          }];
         }
 
-        _prompts = data.data;
-        _copied  = {};
+        _copied = {};
         renderPromptCards(_prompts);
         updateCopyProgress();
 
-        // Save to localStorage for results.html if needed
         localStorage.setItem('plly_results', JSON.stringify({
           type: 'batch',
           data: _prompts.map(p => ({ index: p.index, title: p.title, prompt: p.prompt, lyrics: p.lyrics }))
         }));
         localStorage.setItem('plly_input', JSON.stringify({ country, genre, mood, tempo }));
 
-        // Update sidebar badge
         const badge = document.getElementById('nav-results-badge');
         const nav   = document.getElementById('nav-recent-results');
         if (badge) badge.textContent = _prompts.length + '개';
         if (nav) nav.style.opacity = '1';
 
-        showToast(`✨ ${_prompts.length}개 프롬프트 생성 완료!`, 'success');
-        setTimeout(() => { window.location.href = '/results.html'; }, 600);
+        showToast(`✨ ${_prompts.length}개 세트 생성 완료! (제목 + 풀가사 + 스타일)`, 'success');
 
       } catch (err) {
-        // 403 = 세션 만료 → 자동 로그아웃 후 로그인 페이지로 이동
-        
-          showToast('❌ 오류: ' + err.message, 'error');
-        
+        showToast('❌ 오류: ' + err.message, 'error');
         console.error(err);
       } finally {
-        btn.disabled  = false;
+        btn.disabled = false;
         spinner.classList.add('hidden');
         icon.classList.remove('hidden');
-        btnText.textContent = '프롬프트 10개 자동 생성';
+        btnText.textContent = currentPromptCount === 10 ? '🎵 10개 세트 생성 (제목+가사+스타일)' : '⚡ 1개 세트 생성 (제목+가사+스타일)';
       }
     }
 
