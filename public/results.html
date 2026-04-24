@@ -655,7 +655,8 @@
       try {
         var apiKey = localStorage.getItem('gpm_gemini_key');
         var aiModel = localStorage.getItem('gpm_gemini_model') || 'gemini-2.0-flash';
-        var res = await fetch('/api/generate-image-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ country:country, genre:genre, mood:mood, apiKey:apiKey, aiModel:aiModel }) });
+        var token = localStorage.getItem('gpm_token');
+        var res = await fetch('/api/generate-image-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ country:country, genre:genre, mood:mood, apiKey:apiKey, aiModel:aiModel }) });
         var data = await res.json();
         if (data.success) { _imgData = data.data; renderImgPrompts(); }
         else { document.getElementById('img-prompt-list').innerHTML = '<p class="text-rose-500 text-sm font-bold">⚠️ ' + (data.error || '생성 실패') + '</p>'; }
@@ -705,9 +706,10 @@
       var inp = JSON.parse(localStorage.getItem('plly_input') || '{}');
       var apiKey = localStorage.getItem('gpm_gemini_key');
       var aiModel = localStorage.getItem('gpm_gemini_model') || 'gemini-2.0-flash';
+      var token = localStorage.getItem('gpm_token');
       for (var i = 0; i < batchResults.length; i++) {
         try {
-          var res = await fetch('/api/generate-image-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ country: inp.country || 'KR', genre: inp.genre || 'kpop', mood: inp.mood || 'party', apiKey:apiKey, aiModel:aiModel }) });
+          var res = await fetch('/api/generate-image-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ country: inp.country || 'KR', genre: inp.genre || 'kpop', mood: inp.mood || 'party', apiKey:apiKey, aiModel:aiModel }) });
           var data = await res.json();
           _batchImgData.push({ index: batchResults[i].index, title: batchResults[i].title, data: data.success ? data.data : null });
         } catch (e) { _batchImgData.push({ index: batchResults[i].index, title: batchResults[i].title, data: null }); }

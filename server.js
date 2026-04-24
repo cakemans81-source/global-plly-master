@@ -2721,7 +2721,7 @@ No text overlays, no watermarks.`;
 }
 
 // 이미지 프롬프트 생성 API
-app.post('/api/generate-image-prompt', async (req, res) => {
+app.post('/api/generate-image-prompt', verifyToken, async (req, res) => {
     try {
         const { country, genre, mood, apiKey, aiModel } = req.body;
         if (!country || !genre || !mood) {
@@ -2874,7 +2874,7 @@ app.post('/api/gemini-trends', verifyToken, async (req, res) => {
 });
 
 // 🎯 배치 프롬프트 생성 API (N개 한번에 생성)
-app.post('/api/generate-batch', async (req, res) => {
+app.post('/api/generate-batch', verifyToken, async (req, res) => {
     try {
         const { country, genre, mood, tempo, vocal, structure, creativity, themeText, count = 10, vocalLang, subStyles, refArtist } = req.body;
         if (!country || !genre || !mood || !tempo) {
@@ -3240,7 +3240,7 @@ async function pollSunoClipStatus(clipId, maxRetries = 60) {
  * Response:
  *   { success: true, results: [{ index, title, audioUrl, imageUrl, duration, status }] }
  */
-app.post('/api/suno-generate', async (req, res) => {
+app.post('/api/suno-generate', verifyToken, async (req, res) => {
     try {
         // ── 1. 유효성 검사 ──
         if (!SUNO_COOKIE || SUNO_COOKIE === '여기에_suno_쿠키를_붙여넣으세요') {
@@ -3343,7 +3343,7 @@ app.post('/api/suno-generate', async (req, res) => {
  * 🔍 GET /api/suno-status
  * Suno 연결 상태 확인 (쿠키 유효성 체크)
  */
-app.get('/api/suno-status', async (req, res) => {
+app.get('/api/suno-status', verifyToken, async (req, res) => {
     try {
         if (!SUNO_COOKIE || SUNO_COOKIE === '여기에_suno_쿠키를_붙여넣으세요') {
             return res.json({ connected: false, reason: 'SUNO_COOKIE not configured' });
